@@ -1,4 +1,11 @@
 {
   "name": "cascada",
-  "version": "0.0.0"
+  "version": "0.0.1",
+  "main": "packages/cascada/index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "devDependencies": {
+    "mocha": "^2.2.5"
+  }
 }
