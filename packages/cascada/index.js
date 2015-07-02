@@ -1,5 +1,7 @@
-const inspect = require('util').inspect;
-const css = require('../parse-css');
+// var inspect = require('util').inspect;
+var css = require('../parse-css');
+
+module.exports.types = require('./types');
 
 module.exports.parse = function parse(source) {
   return acceptStylesheet(
@@ -21,7 +23,7 @@ function acceptRules(nodes) {
 function acceptRule(node) {
   switch (node.type) {
     case 'QUALIFIED-RULE': return acceptStyleRule(node);
-    case 'AT-RULE': return acceptAtRule(node);
+    case 'AT-RULE':        return acceptAtRule(node);
     default: throw new Error("Unknown rule type: " + node.type);
   }
 }
@@ -53,7 +55,7 @@ function acceptDeclarations(tokens, acceptor) {
 function acceptStyleDeclaration(node) {
   switch (node.type) {
     case 'DECLARATION': return acceptStylePropertyDeclaration(node);
-    case 'AT-RULE': return acceptAtRule(node);
+    case 'AT-RULE':     return acceptAtRule(node);
     default: throw new Error("Unknown style declaration type: " + node.type);
   }
 }
@@ -63,39 +65,97 @@ function acceptStylePropertyDeclaration(node) {
     type: 'StylePropertyDeclaration',
     important: node.important,
     name: node.name,
-    value: acceptContextualValue(node.name, node.value)
+    values: acceptComponentValues(node.value)
   };
 }
 
-function acceptContextualValue(name, parts) {
-  parts = trimWhitespaceTokens(parts);
-
-  if (name[0] === '-' && name[1] === '-') {
-    return acceptCustomPropertyValue(name, parts);
-  } else {
-    return acceptStyleValue(name, parts);
-  }
+function acceptComponentValues(parts) {
+  return trimWhitespaceTokens(parts).map(acceptComponentValue);
 }
 
-function acceptCustomPropertyValue(name, parts) {
-  if (parts[0].type === 'BLOCK') {
-    return acceptMixin(parts);
-  } else {
-    return acceptStyleValue(name, parts);
+function acceptComponentValue(node) {
+  switch (node.tokenType) {
+    case 'WHITESPACE': return acceptToken(node);
+    case 'DELIM':      return acceptToken(node);
+    case ',':          return acceptToken(node);
+    case 'IDENT':      return acceptIdent(node);
+    case 'HASH':       return acceptHash(node);
+    case 'STRING':     return acceptString(node);
+    case 'NUMBER':     return acceptNumber(node);
+    case 'DIMENSION':  return acceptDimension(node);
+    case 'PERCENTAGE': return acceptPercentage(node);
   }
+
+  switch (node.type) {
+    // case 'integer':    return acceptInteger(node);
+    case 'FUNCTION':   return acceptFunction(node);
+  }
+
+  throw new Error("Unknown component value: <" + node.tokenType + ", " + node.type + ">");
 }
 
-function acceptMixin(parts) {
-  var block = parts[0];
-
+function acceptToken(node) {
   return {
-    type: 'Mixin',
-    body: acceptDeclarations(block.value, acceptMixinStyleDeclaration)
+    type: "Token",
+    source: node.toSource()
   };
 }
 
-function acceptStyleValue(name, parts) {
-  return printValue(parts);
+function acceptIdent(node) {
+  return {
+    type: "Ident",
+    name: node.value,
+    source: node.toSource()
+  };
+}
+
+function acceptHash(node) {
+  return {
+    type: "Hash",
+    value: node.value,
+    source: node.toSource()
+  };
+}
+
+function acceptString(node) {
+  return {
+    type: "String",
+    value: node.value,
+    source: node.toSource()
+  };
+}
+
+function acceptNumber(node) {
+  return {
+    type: "Number",
+    value: node.value,
+    source: node.toSource()
+  };
+}
+
+function acceptDimension(node) {
+  return {
+    type: "Dimension",
+    value: node.value,
+    unit: node.unit,
+    source: node.toSource()
+  };
+}
+
+function acceptPercentage(node) {
+  return {
+    type: "Percentage",
+    value: node.value,
+    source: node.toSource()
+  };
+}
+
+function acceptFunction(node) {
+  return {
+    type: "Function",
+    name: node.name,
+    args: acceptComponentValues(node.value)
+  };
 }
 
 function printValue(parts) {
@@ -110,11 +170,11 @@ function printValue(parts) {
   }).join('');
 }
 
-function acceptStyleValueParts(name, parts) {
-  return parts.map(acceptStyleValuePart);
+function acceptComponentValueParts(name, parts) {
+  return parts.map(acceptComponentValuePart);
 }
 
-function acceptStyleValuePart(node) {
+function acceptComponentValuePart(node) {
   if (node.tokenType) {
     return node;
   }
@@ -123,10 +183,6 @@ function acceptStyleValuePart(node) {
     case 'FUNCTION': return acceptFunction(node);
     default: throw new Error("Unknown style part: " + node.tokenType + " " + node.type + " " + node)
   }
-}
-
-function acceptFunction(node) {
-  throw new Error("Functions in property values (e.g. calc and color) are not yet supported.");
 }
 
 function acceptMixinStyleDeclaration(node) {
